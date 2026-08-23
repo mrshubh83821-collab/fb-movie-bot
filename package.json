@@ -1,0 +1,15 @@
+{
+  "name": "fb-movie-bot",
+  "version": "1.0.0",
+  "description": "Automated Facebook Page poster for trending & upcoming movies (Bollywood/Hollywood/South Indian) using TMDB + Claude + Facebook Graph API",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test-connections": "node test-connections.js",
+    "reel": "node reel-bot.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
