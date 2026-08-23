@@ -1,0 +1,46 @@
+name: Auto Post Movie Updates
+
+on:
+  schedule:
+    # Times are in UTC. IST = UTC + 5:30
+    # 10:00 AM IST -> 04:30 UTC
+    - cron: "30 4 * * *"
+    # 3:00 PM IST -> 09:30 UTC
+    - cron: "30 9 * * *"
+    # 8:00 PM IST -> 14:30 UTC
+    - cron: "30 14 * * *"
+  workflow_dispatch: {} # lets you also trigger it manually from the GitHub Actions tab
+
+permissions:
+  contents: write # needed so the bot can save which movies it already posted
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run the bot
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+        run: npm start
+
+      - name: Save posting history back to repo
+        run: |
+          git config --global user.name "fb-movie-bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add state/posted.json
+          git diff --staged --quiet || git commit -m "Update posted movies history"
+          git push
