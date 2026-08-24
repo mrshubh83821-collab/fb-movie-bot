@@ -55,3 +55,124 @@ function freshCandidates(candidates, alreadyPosted) {
 // if this type's data requirements aren't met (e.g. no upcoming movie for a countdown today).
 async function tryBuildContent(type, candidates, alreadyPosted) {
   const fresh = freshCandidates(candidates, alreadyPosted);
+
+  if (type === "countdown") {
+    for (const movie of fresh) {
+      if (!movie.releaseDate) continue;
+      const posterUrl = `https://image.tmdb.org/t/p/original${movie.posterPath}`;
+      const content = buildCountdown(movie, posterUrl);
+      if (content) return { content, movieId: movie.id, isSlideshow: false };
+    }
+    return null;
+  }
+
+  if (type === "trivia") {
+    for (const movie of fresh.slice(0, 8)) {
+      const details = await fetchMovieDetails(movie.id);
+      const posterUrl = `https://image.tmdb.org/t/p/original${movie.posterPath}`;
+      const content = buildTrivia(movie, details, posterUrl);
+      if (content) return { content, movieId: movie.id, isSlideshow: false };
+    }
+    return null;
+  }
+
+  if (type === "rating_reveal") {
+    for (const movie of fresh) {
+      const posterUrl = `https://image.tmdb.org/t/p/original${movie.posterPath}`;
+      const content = buildRatingReveal(movie, posterUrl);
+      if (content) return { content, movieId: movie.id, isSlideshow: false };
+    }
+    return null;
+  }
+
+  if (type === "poster_reveal") {
+    for (const movie of fresh.slice(0, 8)) {
+      const posters = await fetchMoviePosters(movie.id, 4);
+      const content = buildPosterReveal(movie, posters);
+      if (content) return { content, movieId: movie.id, isSlideshow: true };
+    }
+    return null;
+  }
+
+  if (type === "weekly_roundup") {
+    const movies = await fetchThisWeeksReleases(5);
+    const content = buildWeeklyRoundup(movies);
+    if (content) return { content, movieId: `weekly-${new Date().toISOString().split("T")[0]}`, isSlideshow: true };
+    return null;
+  }
+
+  return null;
+}
+
+async function main() {
+  console.log("Starting Reel Bot run...");
+
+  if (!TMDB_API_KEY || !FB_PAGE_ID || !FB_PAGE_ACCESS_TOKEN) {
+    throw new Error("Missing required environment variables. Need: TMDB_API_KEY, FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN");
+  }
+
+  const audioPath = pickRandomAudio();
+  if (!audioPath) {
+    console.log("No audio files found in assets/audio/. Continuing without audio.");
+  }
+
+  const state = loadState();
+  const candidates = await fetchCandidateMoviesForReel();
+  console.log(`Fetched ${candidates.length} candidate movies.`);
+
+  // Rotate through all 5 types, starting with today's type; fall back to the next
+  // type in the rotation if today's type has no usable data (e.g. no upcoming release).
+  const allTypes = ["countdown", "trivia", "rating_reveal", "poster_reveal", "weekly_roundup"];
+  const todayType = pickReelType();
+  const startIndex = allTypes.indexOf(todayType);
+  const orderedTypes = [...allTypes.slice(startIndex), ...allTypes.slice(0, startIndex)];
+
+  let result = null;
+  let usedType = null;
+  for (const type of orderedTypes) {
+    console.log(`Trying reel type: ${type}`);
+    result = await tryBuildContent(type, candidates, state.posted);
+    if (result) {
+      usedType = type;
+      break;
+    }
+  }
+
+  if (!result) {
+    console.log("No usable content found for any reel type this run. Skipping.");
+    return;
+  }
+
+  console.log(`Using reel type: ${usedType}`);
+  const outputPath = `${TMP_DIR}/reel-${Date.now()}.mp4`;
+
+  if (result.isSlideshow) {
+    console.log("Generating slideshow video with ffmpeg...");
+    await generateSlideshowReel({ slides: result.content.slides, audioPath, outputPath, tmpDir: TMP_DIR });
+  } else {
+    console.log("Generating video with ffmpeg...");
+    await generateReelVideo({
+      posterUrl: result.content.posterUrl,
+      lines: result.content.lines,
+      audioPath,
+      outputPath,
+      tmpDir: TMP_DIR,
+    });
+  }
+  console.log("Video generated:", outputPath);
+
+  console.log("Uploading reel to Facebook...");
+  const fbResult = await postReelToFacebook(outputPath, result.content.caption);
+  console.log("Reel posted successfully:", fbResult.id || fbResult.video_id);
+
+  state.posted.push(result.movieId);
+  saveState(state);
+
+  fs.rmSync(TMP_DIR, { recursive: true, force: true });
+  console.log("Reel bot run complete.");
+}
+
+main().catch((err) => {
+  console.error("Reel bot run failed:", err.message);
+  process.exit(1);
+});
