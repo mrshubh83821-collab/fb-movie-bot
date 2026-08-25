@@ -1,5 +1,6 @@
 import fs from "fs";
 import fetch from "node-fetch";
+import { withRetry } from "./lib/retry.js";
 
 // ---------- CONFIG (comes from environment variables / GitHub Secrets) ----------
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -93,21 +94,24 @@ Overview: ${movie.overview || "No overview available"}
 
 Respond with ONLY the caption text, nothing else.`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-    }
+  const response = await withRetry(() =>
+    fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    ).then(async (res) => {
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini API failed: ${res.status} ${errText}`);
+      }
+      return res;
+    })
   );
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API failed: ${response.status} ${errText}`);
-  }
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
