@@ -3,6 +3,7 @@ import path from "path";
 import { pickBoxOfficeComparison } from "./lib/box-office-source.js";
 import { generateComparisonReel } from "./lib/box-office-reel-generator.js";
 import { postReelToFacebook } from "./lib/facebook-reel.js";
+import { SITE_LINK_LINE } from "./lib/site-link.js";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const FB_PAGE_ID = process.env.FB_PAGE_ID;
@@ -70,7 +71,7 @@ async function main() {
     winner.revenue
   )} at the box office - see how it stacks up against '${loser.title}'!\n\nKaunsi movie zyada pasand aayi? Comment mein batao!\n\n#BoxOffice #MovieStats #FilmyDuniya`;
 
-  const result = await postReelToFacebook(outputPath, caption);
+  const result = await postReelToFacebook(outputPath, `${caption}\n\n${SITE_LINK_LINE}`);
   console.log("Posted to Facebook successfully:", result.id || result.video_id);
 
   state.posted.push(pairKey);

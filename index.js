@@ -4,6 +4,7 @@ import fetch from "node-fetch";
 import { withRetry } from "./lib/retry.js";
 import { generateReelVideo } from "./lib/video-generator.js";
 import { postReelToFacebook } from "./lib/facebook-reel.js";
+import { SITE_LINK_LINE } from "./lib/site-link.js";
 
 // ---------- CONFIG (comes from environment variables / GitHub Secrets) ----------
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -166,7 +167,7 @@ async function main() {
   console.log("Video generated:", outputPath);
 
   console.log("Uploading reel to Facebook...");
-  const result = await postReelToFacebook(outputPath, caption);
+  const result = await postReelToFacebook(outputPath, `${caption}\n\n${SITE_LINK_LINE}`);
   console.log("Posted to Facebook successfully:", result.id || result.video_id);
 
   state.posted.push(movie.id);

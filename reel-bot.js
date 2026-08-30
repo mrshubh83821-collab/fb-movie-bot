@@ -12,6 +12,7 @@ import {
 } from "./lib/reel-types.js";
 import { generateReelVideo, generateSlideshowReel } from "./lib/video-generator.js";
 import { postReelToFacebook } from "./lib/facebook-reel.js";
+import { SITE_LINK_LINE } from "./lib/site-link.js";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const FB_PAGE_ID = process.env.FB_PAGE_ID;
@@ -162,7 +163,7 @@ async function main() {
   console.log("Video generated:", outputPath);
 
   console.log("Uploading reel to Facebook...");
-  const fbResult = await postReelToFacebook(outputPath, result.content.caption);
+  const fbResult = await postReelToFacebook(outputPath, `${result.content.caption}\n\n${SITE_LINK_LINE}`);
   console.log("Reel posted successfully:", fbResult.id || fbResult.video_id);
 
   state.posted.push(result.movieId);
