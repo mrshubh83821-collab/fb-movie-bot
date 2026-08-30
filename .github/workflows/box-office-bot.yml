@@ -1,0 +1,40 @@
+name: Auto Post Box Office Comparison
+
+on:
+  schedule:
+    # 12:00 PM IST -> 6:30 UTC (once a day)
+    - cron: "30 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run the box office bot
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+        run: npm run boxoffice
+
+      - name: Save posting history back to repo
+        run: |
+          git config --global user.name "fb-movie-bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add state/posted-boxoffice.json
+          git diff --staged --quiet || git commit -m "Update posted box-office pairs history"
+          git push
