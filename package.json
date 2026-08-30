@@ -7,9 +7,11 @@
   "scripts": {
     "start": "node index.js",
     "test-connections": "node test-connections.js",
-    "reel": "node reel-bot.js"
+    "reel": "node reel-bot.js",
+    "boxoffice": "node box-office-bot.js"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0"
   }
 }
