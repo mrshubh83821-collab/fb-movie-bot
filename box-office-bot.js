@@ -1,14 +1,16 @@
 import fs from "fs";
+import path from "path";
 import { pickBoxOfficeComparison } from "./lib/box-office-source.js";
-import { generateComparisonCard } from "./lib/compare-graphic.js";
-import { postGeneratedPhoto } from "./lib/facebook-photo-upload.js";
+import { generateComparisonReel } from "./lib/box-office-reel-generator.js";
+import { postReelToFacebook } from "./lib/facebook-reel.js";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const FB_PAGE_ID = process.env.FB_PAGE_ID;
 const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
 
-const STATE_FILE = "./state/posted-boxoffice.json"; // separate state file, never touches the other bots' state
+const STATE_FILE = "./state/posted-boxoffice.json";
 const TMP_DIR = "./tmp-boxoffice";
+const AUDIO_DIR = "./assets/audio";
 const MAX_HISTORY = 200;
 
 function loadState() {
@@ -24,6 +26,13 @@ function saveState(state) {
   fs.mkdirSync("./state", { recursive: true });
   state.posted = state.posted.slice(-MAX_HISTORY);
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+function pickRandomAudio() {
+  if (!fs.existsSync(AUDIO_DIR)) return null;
+  const files = fs.readdirSync(AUDIO_DIR).filter((f) => f.endsWith(".mp3") || f.endsWith(".m4a"));
+  if (files.length === 0) return null;
+  return path.join(AUDIO_DIR, files[Math.floor(Math.random() * files.length)]);
 }
 
 function formatRevenue(revenue) {
@@ -48,20 +57,21 @@ async function main() {
   const { movie1, movie2, pairKey } = pair;
   console.log(`Comparing: ${movie1.title} (${formatRevenue(movie1.revenue)}) vs ${movie2.title} (${formatRevenue(movie2.revenue)})`);
 
-  const cardPath = `${TMP_DIR}/compare.jpg`;
-  console.log("Generating comparison graphic...");
-  await generateComparisonCard({ movie1, movie2, outputPath: cardPath, tmpDir: TMP_DIR });
-  console.log("Graphic generated:", cardPath);
+  const outputPath = `${TMP_DIR}/compare-reel.mp4`;
+  const audioPath = pickRandomAudio();
+
+  console.log("Generating comparison reel...");
+  await generateComparisonReel({ movie1, movie2, audioPath, outputPath, tmpDir: TMP_DIR });
+  console.log("Reel generated:", outputPath);
 
   const winner = movie1.revenue >= movie2.revenue ? movie1 : movie2;
+  const loser = winner === movie1 ? movie2 : movie1;
   const caption = `'${winner.title.toUpperCase()}' has earned ${formatRevenue(
     winner.revenue
-  )} at the box office - see how it stacks up against '${
-    winner === movie1 ? movie2.title : movie1.title
-  }'!\n\nKaunsi movie zyada pasand aayi? Comment mein batao!\n\n#BoxOffice #MovieStats #FilmyDuniya`;
+  )} at the box office - see how it stacks up against '${loser.title}'!\n\nKaunsi movie zyada pasand aayi? Comment mein batao!\n\n#BoxOffice #MovieStats #FilmyDuniya`;
 
-  const result = await postGeneratedPhoto(cardPath, caption);
-  console.log("Posted to Facebook successfully:", result.id || result.post_id);
+  const result = await postReelToFacebook(outputPath, caption);
+  console.log("Posted to Facebook successfully:", result.id || result.video_id);
 
   state.posted.push(pairKey);
   saveState(state);

@@ -1,6 +1,9 @@
 import fs from "fs";
+import path from "path";
 import fetch from "node-fetch";
 import { withRetry } from "./lib/retry.js";
+import { generateReelVideo } from "./lib/video-generator.js";
+import { postReelToFacebook } from "./lib/facebook-reel.js";
 
 // ---------- CONFIG (comes from environment variables / GitHub Secrets) ----------
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -10,13 +13,8 @@ const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
 
 const STATE_FILE = "./state/posted.json";
 const MAX_HISTORY = 500; // how many old movie IDs to remember, so we never repeat
-
-// Industries -> TMDB language / region filters
-const INDUSTRIES = [
-  { name: "Bollywood", language: "hi", region: "IN" },
-  { name: "Hollywood", language: "en", region: "US" },
-  { name: "South Indian", language: "te|ta|ml|kn", region: "IN" }, // handled specially below
-];
+const AUDIO_DIR = "./assets/audio";
+const TMP_DIR = "./tmp-post";
 
 // ---------- STATE HANDLING (avoids posting the same movie twice) ----------
 function loadState() {
@@ -33,6 +31,13 @@ function saveState(state) {
   // Keep only the most recent MAX_HISTORY IDs so the file doesn't grow forever
   state.posted = state.posted.slice(-MAX_HISTORY);
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+function pickRandomAudio() {
+  if (!fs.existsSync(AUDIO_DIR)) return null;
+  const files = fs.readdirSync(AUDIO_DIR).filter((f) => f.endsWith(".mp3") || f.endsWith(".m4a"));
+  if (files.length === 0) return null;
+  return path.join(AUDIO_DIR, files[Math.floor(Math.random() * files.length)]);
 }
 
 // ---------- STEP 1: FETCH TRENDING / UPCOMING MOVIES FROM TMDB ----------
@@ -118,27 +123,6 @@ Respond with ONLY the caption text, nothing else.`;
   return text ? text.trim() : `${movie.title} - Coming Soon! #${movie.industry.replace(/\s/g, "")}`;
 }
 
-// ---------- STEP 4: POST TO FACEBOOK PAGE ----------
-async function postToFacebook(movie, caption) {
-  const imageUrl = `https://image.tmdb.org/t/p/original${movie.posterPath}`;
-
-  const url = `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`;
-  const params = new URLSearchParams({
-    url: imageUrl,
-    caption: caption,
-    access_token: FB_PAGE_ACCESS_TOKEN,
-  });
-
-  const res = await fetch(`${url}?${params.toString()}`, { method: "POST" });
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(`Facebook post failed: ${JSON.stringify(data)}`);
-  }
-
-  return data; // contains post id
-}
-
 // ---------- MAIN ----------
 async function main() {
   console.log("Starting FB Movie Bot run...");
@@ -164,12 +148,31 @@ async function main() {
   const caption = await generateCaption(movie);
   console.log("Generated caption:\n", caption);
 
-  const result = await postToFacebook(movie, caption);
-  console.log("Posted to Facebook successfully:", result.id || result.post_id);
+  const posterUrl = `https://image.tmdb.org/t/p/original${movie.posterPath}`;
+  const outputPath = `${TMP_DIR}/reel-${movie.id}.mp4`;
+  const audioPath = pickRandomAudio();
+
+  console.log("Generating video with ffmpeg...");
+  await generateReelVideo({
+    posterUrl,
+    lines: [
+      { text: movie.title, fontsize: 56 },
+      { text: movie.releaseDate ? `Releasing: ${movie.releaseDate}` : "Coming Soon", fontsize: 38 },
+    ],
+    audioPath,
+    outputPath,
+    tmpDir: TMP_DIR,
+  });
+  console.log("Video generated:", outputPath);
+
+  console.log("Uploading reel to Facebook...");
+  const result = await postReelToFacebook(outputPath, caption);
+  console.log("Posted to Facebook successfully:", result.id || result.video_id);
 
   state.posted.push(movie.id);
   saveState(state);
 
+  fs.rmSync(TMP_DIR, { recursive: true, force: true });
   console.log("Run complete.");
 }
 
