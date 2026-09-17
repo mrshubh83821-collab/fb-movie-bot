@@ -90,8 +90,29 @@ function pickMovie(candidates, alreadyPosted) {
 }
 
 // ---------- STEP 3: GENERATE CAPTION VIA GOOGLE GEMINI API (free tier, no card needed) ----------
+
+// A pool of short, low-effort engagement questions (rotated randomly so
+// captions don't feel repetitive). These are the kind of "Rate out of 10?" /
+// "Comment Yes or No" hooks that drive high comment counts.
+const ENGAGEMENT_QUESTIONS = [
+  "Rate this movie out of 10 in comments!",
+  "Kaun dekhega opening day pe? Comment karo Yes ya No!",
+  "Excited ho iske liye? Comment mein batao!",
+  "Konsa character sabse interesting lag raha hai? Comment karo!",
+  "1 se 10 mein kitni excitement hai iske liye?",
+  "Trailer dekha kya? Comment mein rating do!",
+  "Tag that one friend who NEEDS to watch this!",
+  "Hit LIKE agar excited ho, comment mein rating do!",
+];
+
+function pickEngagementQuestion() {
+  return ENGAGEMENT_QUESTIONS[Math.floor(Math.random() * ENGAGEMENT_QUESTIONS.length)];
+}
+
 async function generateCaption(movie) {
-  const prompt = `Write an engaging, short Facebook post caption (in Hinglish - Hindi+English mix, casual and exciting tone) announcing this movie. Include the release date if available, a one-line hook about the plot, and end with 5-6 relevant hashtags (mix of Hindi and English, movie-specific + generic like #Bollywood #NewRelease). Keep it under 80 words total. Do not use markdown formatting, just plain text with line breaks.
+  const engagementQuestion = pickEngagementQuestion();
+
+  const prompt = `Write an engaging, short Facebook post caption (in Hinglish - Hindi+English mix, casual and exciting tone) announcing this movie. Include the release date if available, and a one-line hook about the plot. Then, on its own line, include this exact engagement question word-for-word (do not change it, do not translate it): "${engagementQuestion}". Then end with 5-6 relevant hashtags (mix of Hindi and English, movie-specific + generic like #Bollywood #NewRelease). Keep it under 90 words total. Do not use markdown formatting, just plain text with line breaks.
 
 Movie: ${movie.title}
 Industry: ${movie.industry}
@@ -121,7 +142,10 @@ Respond with ONLY the caption text, nothing else.`;
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  return text ? text.trim() : `${movie.title} - Coming Soon! #${movie.industry.replace(/\s/g, "")}`;
+  if (text) return text.trim();
+
+  // Fallback caption (still includes the engagement question) if Gemini fails
+  return `${movie.title} - Coming Soon!\n\n${engagementQuestion}\n\n#${movie.industry.replace(/\s/g, "")}`;
 }
 
 // ---------- MAIN ----------
