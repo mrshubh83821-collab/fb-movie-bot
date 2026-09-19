@@ -4,17 +4,15 @@
 // and posts it as a photo to the MoviesTrend Facebook Page with a
 // "Rate the movie out of 10" style caption.
 
-const fs = require("fs");
-const path = require("path");
-const sharp = require("sharp");
+import fs from "fs";
+import path from "path";
+import sharp from "sharp";
 
-const {
-  TMDB_API_KEY,
-  FB_PAGE_ID,
-  FB_PAGE_ACCESS_TOKEN,
-} = process.env;
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const FB_PAGE_ID = process.env.FB_PAGE_ID;
+const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
 
-const STATE_FILE = path.join(__dirname, "state", "grid-posted.json");
+const STATE_FILE = "./state/grid-posted.json";
 const TMP_DIR = "/tmp/movie-grid";
 
 function requireEnv() {
@@ -42,7 +40,6 @@ function saveState(state) {
 }
 
 async function fetchCandidateMovies() {
-  // Mix of trending + upcoming, same spirit as the main bot
   const urls = [
     `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_API_KEY}`,
     `https://api.themoviedb.org/3/movie/upcoming?api_key=${TMDB_API_KEY}&region=IN`,
@@ -62,19 +59,11 @@ async function fetchStills(movieId) {
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
-  // Backdrops are landscape scene-style images (best for a grid of "stills")
   return (data.backdrops || [])
-    .filter((b) => b.iso_639_1 === null || b.iso_639_1 === "en") // avoid text-heavy localized ones
+    .filter((b) => b.iso_639_1 === null || b.iso_639_1 === "en")
     .sort((a, b) => b.vote_average - a.vote_average)
     .slice(0, 8)
     .map((b) => b.file_path);
-}
-
-function pickMovie(candidates, alreadyPosted) {
-  const fresh = candidates.filter((m) => !alreadyPosted.includes(m.id));
-  const pool = fresh.length ? fresh : candidates;
-  pool.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-  return pool[0] || null;
 }
 
 async function downloadImage(filePath, destPath) {
@@ -158,7 +147,6 @@ async function main() {
 
   let movie = null;
   let stills = [];
-  // Try a few candidates in case one doesn't have enough stills
   const sorted = candidates
     .filter((m) => !state.posted.includes(m.id))
     .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
@@ -199,6 +187,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("ERROR:", err.message);
+  console.error("Bot run failed:", err.message);
   process.exit(1);
 });
